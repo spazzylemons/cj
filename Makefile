@@ -8,7 +8,7 @@ $(LIB_FILE): $(OBJ_FILE)
 
 # strip not required but makes it even smaller
 $(OBJ_FILE): $(LIB_NAME).c $(LIB_NAME).h
-	$(CC) -Os -Wall -Wextra -Wpedantic -Werror $(LIB_NAME).c -c -o $@
+	$(CC) -Os -std=c89 -Wall -Wextra -Wpedantic -Werror $(LIB_NAME).c -c -o $@
 
 .PHONY: build clean test
 

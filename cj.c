@@ -25,9 +25,16 @@
 
 /* for error handling */
 #include <setjmp.h>
-#include <stdnoreturn.h>
 /* for strtod */
 #include <stdlib.h>
+
+/* get integer type big enough for unicode codepoints (21 bits). */
+#ifdef __STDC_VERSION__
+#include <stdint.h>
+#define Codepoint int_least32_t
+#else
+#define Codepoint long int
+#endif
 
 /* The parser structure. */
 typedef struct {
@@ -43,7 +50,26 @@ typedef struct {
     CJParseResult result;
 } Parser;
 
-static noreturn void error(Parser *p, CJParseResult result) {
+#if defined(__STDC_VERSION__)
+    #if __STDC_VERSION__ >= 201112L
+        #define ERROR_DECL static _Noreturn void error
+    #endif
+#elif defined(__clang__) || defined(__GNUC__)
+    #if __has_attribute(__noreturn__)
+        #define ERROR_DECL __attribute__((__noreturn__)) static void error
+    #endif
+#elif defined(_MSC_VER)
+    #define ERROR_DECL __declspec(noreturn) static void error
+#endif
+
+#ifdef ERROR_DECL
+#define UNREACHABLE do {} while (0)
+#else
+#define UNREACHABLE do { return 0; } while (0)
+#define ERROR_DECL static void error
+#endif
+
+ERROR_DECL(Parser *p, CJParseResult result) {
     p->result = result;
     longjmp(p->buf, 1);
 }
@@ -168,7 +194,11 @@ static void push_char(Parser *p, String *string, char c) {
     *string_add_one(p, string) = c;
 }
 
-static void push_codepoint_unchecked(Parser *p, String *string, int codepoint) {
+static void push_codepoint_unchecked(
+    Parser *p,
+    String *string,
+    Codepoint codepoint
+) {
     if (codepoint < 0x80) {
         push_char(p, string, codepoint);
     } else {
@@ -193,15 +223,16 @@ static void push_invalid_char(Parser *p, String *string) {
     push_codepoint_unchecked(p, string, INVALID_CHAR);
 }
 
-static int hex_digit(Parser *p) {
+static Codepoint hex_digit(Parser *p) {
     char c = take(p);
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'A' && c <= 'F') return c - 'A' + 10;
     if (c >= 'a' && c <= 'f') return c - 'a' + 10;
     error(p, CJ_SYNTAX_ERROR);
+    UNREACHABLE;
 }
 
-static void push_codepoint(Parser *p, String *string, int codepoint) {
+static void push_codepoint(Parser *p, String *string, Codepoint codepoint) {
     if (codepoint > 0x10FFFF || (codepoint > 0xD7FF && codepoint < 0xE000)) {
         codepoint = INVALID_CHAR;
     }
@@ -219,12 +250,14 @@ static char read_escaped_codepoint(Parser *p) {
         case 't': return '\t';
         default:
             error(p, CJ_SYNTAX_ERROR);
+            UNREACHABLE;
     }
 }
 
-static bool utf8_bad_cont(Parser *p, int *codepoint) {
+static bool utf8_bad_cont(Parser *p, Codepoint *codepoint) {
+    char c;
     if (at_eof(p)) return true;
-    char c = p->current;
+    c = p->current;
     if (((c & 0x80) == 0) || (c & 0x40)) return true;
     *codepoint <<= 6;
     *codepoint |= c & 0x3F;
@@ -232,20 +265,25 @@ static bool utf8_bad_cont(Parser *p, int *codepoint) {
     return false;
 }
 
-static int overlong_check(int codepoint, int mask, int min) {
+static Codepoint overlong_check(
+    Codepoint codepoint,
+    Codepoint mask,
+    Codepoint min
+) {
     codepoint &= mask;
     if (codepoint <= min) return INVALID_CHAR;
     return codepoint;
 }
 
-static int read_utf8_codepoint(Parser *p) {
+static Codepoint read_utf8_codepoint(Parser *p) {
+    Codepoint codepoint;
     char b = take(p);
     if ((b & (1 << 7)) == 0) {
         if (b < ' ') error(p, CJ_SYNTAX_ERROR);
         return b;
     }
     if ((b & (1 << 6)) == 0) return INVALID_CHAR;
-    int codepoint = b & 0x7F;
+    codepoint = b & 0x7F;
     if (utf8_bad_cont(p, &codepoint)) return INVALID_CHAR;
     if ((b & (1 << 5)) == 0) return overlong_check(codepoint, 0x7FF, 0x7F);
     if (utf8_bad_cont(p, &codepoint)) return INVALID_CHAR;
@@ -256,9 +294,9 @@ static int read_utf8_codepoint(Parser *p) {
     return INVALID_CHAR;
 }
 
-static void utf16_escape(Parser *p, String *string, int *pending) {
+static void utf16_escape(Parser *p, String *string, Codepoint *pending) {
     /* read four hex digits */
-    int current
+    Codepoint current
         = (hex_digit(p) << 12)
         | (hex_digit(p) << 8)
         | (hex_digit(p) << 4)
@@ -294,10 +332,10 @@ static void utf16_escape(Parser *p, String *string, int *pending) {
 
 static void parse_string(Parser *p, CJString *str) {
     String string;
+    Codepoint pending = -1;
     string_init(p, &string, str);
-    int pending = -1;
     while (!eat(p, '"')) {
-        int codepoint;
+        Codepoint codepoint;
         if (eat(p, '\\')) {
             if (eat(p, 'u')) {
                 utf16_escape(p, &string, &pending);
@@ -383,8 +421,9 @@ static void parse_number(Parser *p, CJValue *value) {
      * containing the string value of the number, then use strtod on it, and
      * finally free the string and put the number in the value.
      */
-    value->type = CJ_STRING;
     String string;
+    double number;
+    value->type = CJ_STRING;
     string_init(p, &string, &value->as.string);
     /* negative sign */
     if (p->current == '-') push_taken(p, &string);
@@ -410,7 +449,7 @@ static void parse_number(Parser *p, CJValue *value) {
     /* parse number */
     /* TODO - how should huge numbers (that parse to infinity) be handled? */
     push_char(p, &string, 0);
-    double number = strtod(value->as.string.chars, NULL);
+    number = strtod(value->as.string.chars, NULL);
     /* replace string with number */
     dealloc(p->allocator, value->as.string.chars);
     value->type = CJ_NUMBER;
@@ -471,13 +510,12 @@ static void parse(Parser *p, CJValue *value) {
 
 CJParseResult cj_parse(CJAllocator *allocator, CJReader *reader, CJValue *out) {
     /* create a parser */
-    Parser p = {
-        .current = ' ',
-        .allocator = allocator,
-        .reader = reader,
-        .depth = 0,
-        .result = CJ_SUCCESS,
-    };
+    Parser p;
+    p.current = ' ';
+    p.allocator = allocator;
+    p.reader = reader;
+    p.depth = 0;
+    p.result = CJ_SUCCESS;
     if (setjmp(p.buf)) {
         /* an error occurred, so free memory */
         cj_free(allocator, out);
@@ -491,18 +529,19 @@ CJParseResult cj_parse(CJAllocator *allocator, CJReader *reader, CJValue *out) {
 }
 
 void cj_free(CJAllocator *allocator, const CJValue *value) {
+    size_t i;
     switch (value->type) {
         case CJ_STRING:
             dealloc(allocator, value->as.string.chars);
             break;
         case CJ_ARRAY:
-            for (size_t i = 0; i < value->as.array.length; ++i) {
+            for (i = 0; i < value->as.array.length; ++i) {
                 cj_free(allocator, &value->as.array.elements[i]);
             }
             dealloc(allocator, value->as.array.elements);
             break;
         case CJ_OBJECT:
-            for (size_t i = 0; i < value->as.object.length; ++i) {
+            for (i = 0; i < value->as.object.length; ++i) {
                 CJObjectMember *member = &value->as.object.members[i];
                 dealloc(allocator, member->key.chars);
                 cj_free(allocator, &member->value);

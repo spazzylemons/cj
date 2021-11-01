@@ -28,7 +28,12 @@
 extern "C" {
 #endif
 
+#ifdef __STDC_VERSION__
 #include <stdbool.h>
+#else
+typedef enum { false, true } bool;
+#endif
+
 #include <stddef.h>
 
 /* The maximum depth of a JSON object before it is rejected. */
@@ -41,7 +46,7 @@ typedef enum {
     CJ_NUMBER,
     CJ_STRING,
     CJ_ARRAY,
-    CJ_OBJECT,
+    CJ_OBJECT
 } CJType;
 
 /*
@@ -99,7 +104,7 @@ typedef enum {
     /* the JSON was nested too deeply */
     CJ_TOO_MUCH_NESTING,
     /* the stream ran into an error */
-    CJ_READ_ERROR,
+    CJ_READ_ERROR
 } CJParseResult;
 
 /* The allocator interface. */

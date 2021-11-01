@@ -6,7 +6,8 @@ cj is a tiny, flexible, and robust JSON parsing library for C.
 
 cj is one header file and one source file. Running `make` will build an object
 file and library file. Alternatively, since it is so small, you may prefer to
-add the source and header files directly into your project.
+add the source and header files directly into your project. cj is written in C89
+and so is compabtile with compilers that only support C89.
 
 ## Usage
 
