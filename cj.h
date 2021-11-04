@@ -28,11 +28,7 @@
 extern "C" {
 #endif
 
-#ifdef __STDC_VERSION__
-#include <stdbool.h>
-#else
-typedef enum { false, true } bool;
-#endif
+typedef enum { CJ_FALSE, CJ_TRUE } CJ_BOOL;
 
 #include <stddef.h>
 
@@ -77,7 +73,7 @@ typedef struct {
 typedef struct CJValue {
     CJType type;
     union {
-        bool     boolean;
+        CJ_BOOL  boolean;
         double   number;
         CJString string;
         CJArray  array;

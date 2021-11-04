@@ -87,7 +87,7 @@ static void dealloc(CJAllocator *allocator, void *ptr) {
     allocator->allocate(allocator, ptr, 0);
 }
 
-static bool at_eof(const Parser *p) {
+static CJ_BOOL at_eof(const Parser *p) {
     return p->current < 0;
 }
 
@@ -120,12 +120,12 @@ static void skip_ws(Parser *p) {
     }
 }
 
-static bool eat(Parser *p, char c) {
+static CJ_BOOL eat(Parser *p, char c) {
     if (p->current == c) {
         advance(p);
-        return true;
+        return CJ_TRUE;
     }
-    return false;
+    return CJ_FALSE;
 }
 
 static void require(Parser *p, char c) {
@@ -254,15 +254,15 @@ static char read_escaped_codepoint(Parser *p) {
     }
 }
 
-static bool utf8_bad_cont(Parser *p, Codepoint *codepoint) {
+static CJ_BOOL utf8_bad_cont(Parser *p, Codepoint *codepoint) {
     char c;
-    if (at_eof(p)) return true;
+    if (at_eof(p)) return CJ_TRUE;
     c = p->current;
-    if (((c & 0x80) == 0) || (c & 0x40)) return true;
+    if (((c & 0x80) == 0) || (c & 0x40)) return CJ_TRUE;
     *codepoint <<= 6;
     *codepoint |= c & 0x3F;
     advance(p);
-    return false;
+    return CJ_FALSE;
 }
 
 static Codepoint overlong_check(
@@ -403,7 +403,7 @@ static void push_taken(Parser *p, String *string) {
     push_char(p, string, take_unchecked(p));
 }
 
-static bool is_digit(Parser *p) {
+static CJ_BOOL is_digit(Parser *p) {
     return p->current >= '0' && p->current <= '9';
 }
 
@@ -473,7 +473,7 @@ static void parse(Parser *p, CJValue *value) {
                 require(p, 'u');
                 require(p, 'e');
                 value->type = CJ_BOOLEAN;
-                value->as.boolean = true;
+                value->as.boolean = CJ_TRUE;
                 break;
             case 'f':
                 require(p, 'a');
@@ -481,7 +481,7 @@ static void parse(Parser *p, CJValue *value) {
                 require(p, 's');
                 require(p, 'e');
                 value->type = CJ_BOOLEAN;
-                value->as.boolean = false;
+                value->as.boolean = CJ_TRUE;
                 break;
             case 'n':
                 require(p, 'u');
