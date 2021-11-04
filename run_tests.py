@@ -6,7 +6,7 @@ import sys
 
 # add entry for our library
 programs['C cj'] = {
-    'url': '', # will fill this in soon!
+    'url': 'https://github.com/spazzylemons/cj',
     'commands': ['./test'],
 }
 
