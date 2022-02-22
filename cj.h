@@ -118,19 +118,19 @@ typedef struct CJAllocator {
 
 /* The reader interface. */
 typedef struct CJReader {
-    /* Read a byte, or return CJ_READ_EOF or CJ_READ_ERR if appropriate. */
-    int (*read)(struct CJReader *reader);
+    /* The buffer to read to. */
+    char *buffer;
+    /*
+     * Refill the buffer. Store the number of bytes read in size on success.
+     * A successful read must read at least one byte of data, or else no more
+     * data will be read. On an error, return a nonzero value.
+     */
+    int (*read)(struct CJReader *reader, size_t *size);
 } CJReader;
 
 /* A container_of implementation for use with interfaces. */
 #define cj_container_of(ptr, type, member)\
     (type*) (void*) ((char*) ptr - offsetof(type, member))
-
-/* The value to be returned by the read callback at the end of the stream. */
-#define CJ_CHAR_EOF -1
-
-/* The value to be returned by the read callback upon an error while reading. */
-#define CJ_CHAR_ERR -2
 
 /* Try to parse a JSON value. */
 CJParseResult cj_parse(CJAllocator *allocator, CJReader *reader, CJValue *out);

@@ -39,22 +39,25 @@ may access your own data to read from whatever data stream you desire.
 /* example interface - read from a file */
 typedef struct {
     FILE *f;
+    size_t buffer_size;
     CJReader interface;
 } FileReader;
 
 /* implement the read callback for a file reader */
-static int file_reader_read(CJReader *cj_reader) {
+static int file_reader_read(CJReader *cj_reader, size_t *size) {
     /* get the file reader from the interface pointer */
     FileReader *file_reader = cj_container_of(cj_reader, FileReader, interface);
-    /* read a character */
-    int c = fgetc(file_reader->file);
-    if (c == EOF) {
-        /* return eof or error if applicable */
-        if (feof(file_reader->file)) return CJ_CHAR_EOF;
-        return CJ_CHAR_ERR;
+    /* read characters, handle errors */
+    *size = fread(
+        cj_reader->buffer,
+        1,
+        file_reader->buffer_size,
+        file_reader->file
+    );
+    if (*size == 0) {
+        if (!feof(file_reader->file)) return -1;
     }
-    /* otherwise, return unsigned character */
-    return c;
+    return 0;
 }
 
 /* implement the allocate callback using only stdlib functions */
@@ -67,8 +70,14 @@ static void *basic_allocate(CJAllocator *cj_allocator, void *ptr, size_t size) {
     return realloc(ptr, size);
 }
 
+/* create a buffer for read operations */
+char b[128];
 /* store the callback in the interface */
-FileReader r = { .file = f, .interface = { .read = file_reader_read } };
+FileReader r = {
+    .file = f,
+    .buffer_size = sizeof(b),
+    .interface = { .buffer = b, .read = file_reader_read },
+};
 /* If no data is needed for the interface, it may be used bare */
 CJAllocator a = { .allocate = basic_allocate };
 /* use a pointer to the interface for parsing */

@@ -38,8 +38,10 @@
 
 /* The parser structure. */
 typedef struct {
-    /* The current character, or CJ_CHAR_EOF if at EOF. */
-    int current;
+    /* The number of bytes remaining in the buffer. */
+    size_t remaining;
+    /* A pointer to the current character in the buffer, or NULL on EOF. */
+    const char *buf_ptr;
     /* The interfaces for reading and allocating. */
     CJAllocator *allocator;
     CJReader *reader;
@@ -49,6 +51,9 @@ typedef struct {
     jmp_buf buf;
     CJParseResult result;
 } Parser;
+
+/* Global buffer for parser initial state. */
+static const char initial_buffer[1] = { ' ' };
 
 #if defined(__STDC_VERSION__)
     #if __STDC_VERSION__ >= 201112L
@@ -88,17 +93,27 @@ static void dealloc(CJAllocator *allocator, void *ptr) {
 }
 
 static CJ_BOOL at_eof(const Parser *p) {
-    return p->current < 0;
+    return p->buf_ptr == NULL;
 }
 
 static void advance(Parser *p) {
     if (at_eof(p)) return;
-    p->current = p->reader->read(p->reader);
-    if (p->current == CJ_CHAR_ERR) error(p, CJ_READ_ERROR);
+    if (--p->remaining == 0) {
+        if (p->reader->read(p->reader, &p->remaining)) {
+            error(p, CJ_READ_ERROR);
+        }
+        if (p->remaining == 0) {
+            p->buf_ptr = NULL;
+        } else {
+            p->buf_ptr = p->reader->buffer;
+        }
+    } else {
+        ++p->buf_ptr;
+    }
 }
 
 static char take_unchecked(Parser *p) {
-    char result = p->current;
+    char result = *p->buf_ptr;
     advance(p);
     return result;
 }
@@ -109,8 +124,8 @@ static char take(Parser *p) {
 }
 
 static void skip_ws(Parser *p) {
-    for (;;) {
-        switch (p->current) {
+    while (p->buf_ptr != NULL) {
+        switch (*p->buf_ptr) {
             case ' ': case '\n': case '\r': case '\t':
                 advance(p);
                 break;
@@ -120,8 +135,12 @@ static void skip_ws(Parser *p) {
     }
 }
 
+static CJ_BOOL check(Parser *p, char c) {
+    return p->buf_ptr != NULL && *p->buf_ptr == c;
+}
+
 static CJ_BOOL eat(Parser *p, char c) {
-    if (p->current == c) {
+    if (check(p, c)) {
         advance(p);
         return CJ_TRUE;
     }
@@ -129,7 +148,7 @@ static CJ_BOOL eat(Parser *p, char c) {
 }
 
 static void require(Parser *p, char c) {
-    if (p->current != c) error(p, CJ_SYNTAX_ERROR);
+    if (!check(p, c)) error(p, CJ_SYNTAX_ERROR);
     advance(p);
 }
 
@@ -257,7 +276,7 @@ static char read_escaped_codepoint(Parser *p) {
 static CJ_BOOL utf8_bad_cont(Parser *p, Codepoint *codepoint) {
     char c;
     if (at_eof(p)) return CJ_TRUE;
-    c = p->current;
+    c = *p->buf_ptr;
     if (((c & 0x80) == 0) || (c & 0x40)) return CJ_TRUE;
     *codepoint <<= 6;
     *codepoint |= c & 0x3F;
@@ -365,7 +384,7 @@ static void parse_array(Parser *p, CJArray *arr) {
     Array array;
     array_init(p, &array, arr);
     skip_ws(p);
-    if (p->current != ']') {
+    if (!check(p, ']')) {
         do {
             parse(p, array_add_one(p, &array));
         } while (eat(p, ','));
@@ -390,7 +409,7 @@ static void parse_object(Parser *p, CJObject *obj) {
     Object object;
     object_init(p, &object, obj);
     skip_ws(p);
-    if (p->current != '}') {
+    if (!check(p, '}')) {
         do {
             parse_member(p, object_add_one(p, &object));
         } while (eat(p, ','));
@@ -404,7 +423,8 @@ static void push_taken(Parser *p, String *string) {
 }
 
 static CJ_BOOL is_digit(Parser *p) {
-    return p->current >= '0' && p->current <= '9';
+    if (at_eof(p)) return CJ_FALSE;
+    return *p->buf_ptr >= '0' && *p->buf_ptr <= '9';
 }
 
 static void require_digits(Parser *p, String *string) {
@@ -426,22 +446,22 @@ static void parse_number(Parser *p, CJValue *value) {
     value->type = CJ_STRING;
     string_init(p, &string, &value->as.string);
     /* negative sign */
-    if (p->current == '-') push_taken(p, &string);
+    if (check(p, '-')) push_taken(p, &string);
     /* integer part */
-    if (p->current == '0') {
+    if (check(p, '0')) {
         push_taken(p, &string);
     } else {
         require_digits(p, &string);
     }
     /* fraction part */
-    if (p->current == '.') {
+    if (check(p, '.')) {
         push_taken(p, &string);
         require_digits(p, &string);
     }
     /* exponent part */
-    if (p->current == 'e' || p->current == 'E') {
+    if (!at_eof(p) && (*p->buf_ptr == 'e' || *p->buf_ptr == 'E')) {
         push_taken(p, &string);
-        if (p->current == '-' || p->current == '+') {
+        if (!at_eof(p) && (*p->buf_ptr == '-' || *p->buf_ptr == '+')) {
             push_taken(p, &string);
         }
         require_digits(p, &string);
@@ -464,7 +484,7 @@ static void parse(Parser *p, CJValue *value) {
         error(p, CJ_TOO_MUCH_NESTING);
     }
     skip_ws(p);
-    if (p->current == '-' || is_digit(p)) {
+    if (check(p, '-') || is_digit(p)) {
         parse_number(p, value);
     } else {
         switch (take(p)) {
@@ -511,7 +531,8 @@ static void parse(Parser *p, CJValue *value) {
 CJParseResult cj_parse(CJAllocator *allocator, CJReader *reader, CJValue *out) {
     /* create a parser */
     Parser p;
-    p.current = ' ';
+    p.buf_ptr = initial_buffer;
+    p.remaining = 1;
     p.allocator = allocator;
     p.reader = reader;
     p.depth = 0;

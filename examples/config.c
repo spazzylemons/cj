@@ -171,18 +171,18 @@ static void *allocate(CJAllocator *interface, void *ptr, size_t size) {
 /* The file reader interface for cj, containing a file pointer. */
 typedef struct {
     FILE *file;
+    size_t buffer_size;
     CJReader interface;
 } FileReader;
 
 /* Implementation of the read callback for cj. */
-static int read(CJReader *interface) {
+static int read(CJReader *interface, size_t *size) {
     FileReader *reader = cj_container_of(interface, FileReader, interface);
-    int c = fgetc(reader->file);
-    if (c == EOF) {
-        if (feof(reader->file)) return CJ_CHAR_EOF;
-        return CJ_CHAR_ERR;
+    *size = fread(interface->buffer, 1, reader->buffer_size, reader->file);
+    if (*size == 0) {
+        if (!feof(reader->file)) return -1;
     }
-    return c;
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -197,8 +197,13 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
     /* interfaces for building json tree */
+    char buffer[128];
     CJAllocator allocator = { .allocate = allocate };
-    FileReader reader = { .file = f, .interface = { .read = read } };
+    FileReader reader = {
+        .file = f,
+        .buffer_size = sizeof(buffer),
+        .interface = { .buffer = buffer, .read = read },
+    };
     /* parse json */
     CJValue value;
     CJParseResult result = cj_parse(&allocator, &reader.interface, &value);
