@@ -38,7 +38,7 @@ may access your own data to read from whatever data stream you desire.
 ```c
 /* example interface - read from a file */
 typedef struct {
-    FILE *f;
+    FILE *file;
     size_t buffer_size;
     CJReader interface;
 } FileReader;
