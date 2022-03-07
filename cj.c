@@ -501,7 +501,7 @@ static void parse(Parser *p, CJValue *value) {
                 require(p, 's');
                 require(p, 'e');
                 value->type = CJ_BOOLEAN;
-                value->as.boolean = CJ_TRUE;
+                value->as.boolean = CJ_FALSE;
                 break;
             case 'n':
                 require(p, 'u');
