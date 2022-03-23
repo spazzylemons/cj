@@ -1,6 +1,6 @@
 /*
  * cj - a tiny and simple JSON parsing library for C
- * Copyright (c) 2021 spazzylemons
+ * Copyright (c) 2022 spazzylemons
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
