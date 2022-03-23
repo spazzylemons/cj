@@ -159,15 +159,6 @@ static void print_config(const Config *config) {
     printf("theme: %s\n", config->theme);
 }
 
-/* Implementation of the allocation callback for cj. */
-static void *allocate(CJAllocator *interface, void *ptr, size_t size) {
-    if (size == 0) {
-        free(ptr);
-        return NULL;
-    }
-    return realloc(ptr, size);
-}
-
 /* The file reader interface for cj, containing a file pointer. */
 typedef struct {
     FILE *file;
@@ -198,7 +189,6 @@ int main(int argc, char *argv[]) {
     }
     /* interfaces for building json tree */
     char buffer[128];
-    CJAllocator allocator = { .allocate = allocate };
     FileReader reader = {
         .file = f,
         .buffer_size = sizeof(buffer),
@@ -206,7 +196,7 @@ int main(int argc, char *argv[]) {
     };
     /* parse json */
     CJValue value;
-    CJParseResult result = cj_parse(&allocator, &reader.interface, &value);
+    CJParseResult result = cj_parse(NULL, &reader.interface, &value);
     /* close input file */
     fclose(f);
     /* handle json parsing error */
@@ -218,7 +208,7 @@ int main(int argc, char *argv[]) {
     Config config;
     bool load_result = load_config(&value, &config);
     /* destroy json tree */
-    cj_free(&allocator, &value);
+    cj_free(NULL, &value);
     /* handle config loading error */
     if (!load_result) {
         fprintf(stderr, "failed to load config file\n");

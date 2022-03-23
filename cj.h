@@ -35,6 +35,12 @@ typedef enum { CJ_FALSE, CJ_TRUE } CJ_BOOL;
 /* The maximum depth of a JSON object before it is rejected. */
 #define CJ_MAX_DEPTH 1024
 
+/*
+ * If defined, a default allocator interface using realloc will be used if
+ * NULL is passed for the allocator.
+ */
+#define CJ_DEFAULT_ALLOCATOR
+
 /* The type of a JSON value. */
 typedef enum {
     CJ_NULL,

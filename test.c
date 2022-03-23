@@ -29,15 +29,6 @@
 /* to indicate that the parse was not a success or a failure */
 #define EXIT_CRASH 2
 
-/* The implementation of the allocator. */
-static void *allocate(CJAllocator *interface, void *ptr, size_t size) {
-    if (size == 0) {
-        free(ptr);
-        return NULL;
-    }
-    return realloc(ptr, size);
-}
-
 /* A reader for a file. */
 typedef struct {
     FILE *file;
@@ -58,8 +49,6 @@ static int read(CJReader *interface, size_t *size) {
 }
 
 int main(int argc, char *argv[]) {
-    /* assemble interfaces */
-    CJAllocator allocator = { .allocate = allocate };
     /* define a buffer for the reader */
     char buffer[128];
     FileReader reader = {
@@ -71,13 +60,13 @@ int main(int argc, char *argv[]) {
     if (reader.file == NULL) return EXIT_CRASH;
     /* parse the input */
     CJValue value;
-    CJParseResult result = cj_parse(&allocator, &reader.interface, &value);
+    CJParseResult result = cj_parse(NULL, &reader.interface, &value);
     /* close the file */
     fclose(reader.file);
     /* handle result value */
     switch (result) {
         case CJ_SUCCESS:
-            cj_free(&allocator, &value);
+            cj_free(NULL, &value);
             return EXIT_SUCCESS;
         case CJ_SYNTAX_ERROR: case CJ_TOO_MUCH_NESTING:
             return EXIT_FAILURE;

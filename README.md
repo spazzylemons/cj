@@ -30,10 +30,11 @@ if (cj_parse(&allocator, &reader, &value) == CJ_SUCCESS) {
 
 ### Interfaces
 
-cj requires you to provide interfaces for reading and allocating, and does not
-provide default implementations. The interfaces contain a function pointer for
-the callback, which takes the interface as the first argument. From there you
-may access your own data to read from whatever data stream you desire.
+cj requires you to provide interfaces for reading and allocating, and may
+provide default implementations if compiled with them. The interfaces contain a
+function pointer for the callback, which takes the interface as the first
+argument. From there you may access your own data to read from whatever data
+stream you desire.
 
 ```c
 /* example interface - read from a file */
@@ -60,16 +61,6 @@ static int file_reader_read(CJReader *cj_reader, size_t *size) {
     return 0;
 }
 
-/* implement the allocate callback using only stdlib functions */
-static void *basic_allocate(CJAllocator *cj_allocator, void *ptr, size_t size) {
-    (void) cj_allocator;
-    if (size == 0) {
-        free(ptr);
-        return NULL;
-    }
-    return realloc(ptr, size);
-}
-
 /* create a buffer for read operations */
 char b[128];
 /* store the callback in the interface */
@@ -78,10 +69,9 @@ FileReader r = {
     .buffer_size = sizeof(b),
     .interface = { .buffer = b, .read = file_reader_read },
 };
-/* If no data is needed for the interface, it may be used bare */
-CJAllocator a = { .allocate = basic_allocate };
 /* use a pointer to the interface for parsing */
-CJParseResult result = cj_parse(&a, &r.interface, &value);
+/* passing a NULL allocator uses the default allocator, if included */
+CJParseResult result = cj_parse(NULL, &r.interface, &value);
 ```
 
 ### Using the JSON data

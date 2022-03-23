@@ -52,6 +52,15 @@ typedef struct {
     CJParseResult result;
 } Parser;
 
+#ifdef CJ_DEFAULT_ALLOCATOR
+static void *default_allocate(CJAllocator *allocator, void *ptr, size_t size) {
+    (void) allocator;
+    return realloc(ptr, size);
+}
+
+static CJAllocator default_allocator = { default_allocate };
+#endif
+
 /* Global buffer for parser initial state. */
 static const char initial_buffer[1] = { ' ' };
 
@@ -531,6 +540,9 @@ static void parse(Parser *p, CJValue *value) {
 CJParseResult cj_parse(CJAllocator *allocator, CJReader *reader, CJValue *out) {
     /* create a parser */
     Parser p;
+#ifdef CJ_DEFAULT_ALLOCATOR
+    if (allocator == NULL) allocator = &default_allocator;
+#endif
     p.buf_ptr = initial_buffer;
     p.remaining = 1;
     p.allocator = allocator;
@@ -539,7 +551,7 @@ CJParseResult cj_parse(CJAllocator *allocator, CJReader *reader, CJValue *out) {
     p.result = CJ_SUCCESS;
     if (setjmp(p.buf)) {
         /* an error occurred, so free memory */
-        cj_free(allocator, out);
+        cj_free(p.allocator, out);
     } else {
         /* parse root value */
         parse(&p, out);
@@ -551,6 +563,9 @@ CJParseResult cj_parse(CJAllocator *allocator, CJReader *reader, CJValue *out) {
 
 void cj_free(CJAllocator *allocator, const CJValue *value) {
     size_t i;
+#ifdef CJ_DEFAULT_ALLOCATOR
+    if (allocator == NULL) allocator = &default_allocator;
+#endif
     switch (value->type) {
         case CJ_STRING:
             dealloc(allocator, value->as.string.chars);
