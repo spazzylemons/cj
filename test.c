@@ -29,25 +29,6 @@
 /* to indicate that the parse was not a success or a failure */
 #define EXIT_CRASH 2
 
-/* A reader for a file. */
-typedef struct {
-    FILE *file;
-    size_t buffer_size;
-    CJReader interface;
-} FileReader;
-
-/* The implementation of the reader. */
-static int read(CJReader *interface, size_t *size) {
-    /* get reader struct from interface pointer */
-    FileReader *reader = cj_container_of(interface, FileReader, interface);
-    /* read characters, handle errors */
-    *size = fread(interface->buffer, 1, reader->buffer_size, reader->file);
-    if (*size == 0) {
-        if (!feof(reader->file)) return -1;
-    }
-    return 0;
-}
-
 int main(int argc, char *argv[]) {
     FILE *f = fopen(argv[1], "r");
     /* ensure the input file is open */

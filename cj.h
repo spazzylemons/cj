@@ -140,14 +140,13 @@ typedef struct CJAllocator {
 
 /* The reader interface. */
 typedef struct CJReader {
-    /* The buffer to read to. */
-    char *buffer;
     /*
-     * Refill the buffer. Store the number of bytes read in size on success.
-     * A successful read must read at least one byte of data, or else no more
-     * data will be read. On an error, return a nonzero value.
+     * Refill the buffer.
+     * On success, store the number of bytes read in size and return the buffer.
+     * On failure, store a nonzero value in size and return NULL.
+     * On end of file, store zero in size and return NULL.
      */
-    int (*read)(struct CJReader *reader, size_t *size);
+    const char *(*read)(struct CJReader *reader, size_t *size);
 } CJReader;
 
 #ifdef CJ_FILE_READER
@@ -155,6 +154,7 @@ typedef struct CJReader {
 typedef struct {
     CJReader reader;
     FILE *file;
+    char *buffer;
     size_t buffer_size;
 } CJFileReader;
 
@@ -171,7 +171,7 @@ void cj_init_file_reader(
 /* An implementation of the reader interface that reads from a string. */
 typedef struct {
     CJReader reader;
-    CJ_BOOL used;
+    const char *string;
 } CJStringReader;
 
 /* Initialize a string reader. */

@@ -66,18 +66,19 @@ static CJAllocator default_allocator = { default_allocate };
 #endif
 
 #ifdef CJ_FILE_READER
-static int file_reader_callback(CJReader *reader, size_t *size) {
+static const char *file_reader_callback(CJReader *reader, size_t *size) {
     CJFileReader *file_reader = cj_container_of(reader, CJFileReader, reader);
     *size = fread(
-        reader->buffer,
+        file_reader->buffer,
         1,
         file_reader->buffer_size,
         file_reader->file
     );
     if (*size == 0) {
-        if (!feof(file_reader->file)) return -1;
+        *size = !feof(file_reader->file);
+        return NULL;
     }
-    return 0;
+    return file_reader->buffer;
 }
 
 void cj_init_file_reader(
@@ -87,30 +88,30 @@ void cj_init_file_reader(
     size_t buffer_size
 ) {
     file_reader->file = file;
-    file_reader->reader.buffer = buffer;
+    file_reader->buffer = buffer;
     file_reader->buffer_size = buffer_size;
     file_reader->reader.read = file_reader_callback;
 }
 #endif
 
 #ifdef CJ_STRING_READER
-static int string_reader_callback(CJReader *reader, size_t *size) {
+static const char *string_reader_callback(CJReader *reader, size_t *size) {
     CJStringReader *string_reader =
         cj_container_of(reader, CJStringReader, reader);
-    if (string_reader->used) {
+    if (string_reader->string == NULL) {
         *size = 0;
+        return NULL;
     } else {
-        *size = strlen(string_reader->reader.buffer);
-        string_reader->used = CJ_TRUE;
+        const char *result = string_reader->string;
+        *size = strlen(string_reader->string);
+        string_reader->string = NULL;
+        return result;
     }
-    return 0;
 }
 
 void cj_init_string_reader(CJStringReader *string_reader, const char *string) {
-    /* TODO don't cast a const pointer to a mutable pointer */
-    string_reader->reader.buffer = (void*) string;
+    string_reader->string = string;
     string_reader->reader.read = string_reader_callback;
-    string_reader->used = CJ_FALSE;
 }
 #endif
 
@@ -161,13 +162,9 @@ static CJ_BOOL at_eof(const Parser *p) {
 static void advance(Parser *p) {
     if (at_eof(p)) return;
     if (--p->remaining == 0) {
-        if (p->reader->read(p->reader, &p->remaining)) {
+        p->buf_ptr = p->reader->read(p->reader, &p->remaining);
+        if (p->buf_ptr == NULL && p->remaining != 0) {
             error(p, CJ_READ_ERROR);
-        }
-        if (p->remaining == 0) {
-            p->buf_ptr = NULL;
-        } else {
-            p->buf_ptr = p->reader->buffer;
         }
     } else {
         ++p->buf_ptr;
