@@ -105,7 +105,10 @@ deeply nested a JSON object may be. This value is defined by `CJ_MAX_DEPTH`.
 
 ### Thread safety
 
-cj is thread safe, provided your interfaces are also thread safe.
+cj is thread safe, provided that:
+
+- Your interfaces are also thread safe
+- Your standard library's implementation of `setjmp`/`longjmp` is thread safe
 
 ## License
 
