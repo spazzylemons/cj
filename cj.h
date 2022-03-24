@@ -172,10 +172,15 @@ void cj_init_file_reader(
 typedef struct {
     CJReader reader;
     const char *string;
+    size_t length;
 } CJStringReader;
 
 /* Initialize a string reader. */
-void cj_init_string_reader(CJStringReader *string_reader, const char *string);
+void cj_init_string_reader(
+    CJStringReader *string_reader,
+    const char *string,
+    size_t length
+);
 #endif
 
 /* A container_of implementation for use with interfaces. */

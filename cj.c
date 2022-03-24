@@ -103,14 +103,19 @@ static const char *string_reader_callback(CJReader *reader, size_t *size) {
         return NULL;
     } else {
         const char *result = string_reader->string;
-        *size = strlen(string_reader->string);
+        *size = string_reader->length;
         string_reader->string = NULL;
         return result;
     }
 }
 
-void cj_init_string_reader(CJStringReader *string_reader, const char *string) {
+void cj_init_string_reader(
+    CJStringReader *string_reader,
+    const char *string,
+    size_t length
+) {
     string_reader->string = string;
+    string_reader->length = length;
     string_reader->reader.read = string_reader_callback;
 }
 #endif

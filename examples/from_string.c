@@ -26,6 +26,7 @@
 
 #include <cj.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -65,7 +66,7 @@ static void read_environment(const CJValue *v) {
 int main(void) {
     /* set up reader */
     CJStringReader r;
-    cj_init_string_reader(&r, environment);
+    cj_init_string_reader(&r, environment, strlen(environment));
     /* read object */
     CJValue v;
     cj_parse(NULL, &r.reader, &v);
