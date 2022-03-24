@@ -35,9 +35,9 @@
 /* get integer type big enough for unicode codepoints (21 bits). */
 #ifdef __STDC_VERSION__
 #include <stdint.h>
-#define Codepoint int_least32_t
+typedef int_least32_t Codepoint;
 #else
-#define Codepoint long int
+typedef long Codepoint;
 #endif
 
 /* The parser structure. */
