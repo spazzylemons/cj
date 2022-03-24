@@ -43,7 +43,7 @@ typedef enum { CJ_FALSE, CJ_TRUE } CJ_BOOL;
 
 /*
  * If defined, a built-in reader interface is available that can read from a
- * *FILE.
+ * FILE*.
  */
 #define CJ_FILE_READER
 
