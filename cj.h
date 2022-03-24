@@ -47,6 +47,12 @@ typedef enum { CJ_FALSE, CJ_TRUE } CJ_BOOL;
  */
 #define CJ_FILE_READER
 
+/*
+ * If defined, a built-in reader interface is available that can read from a
+ * string.
+ */
+#define CJ_STRING_READER
+
 #ifdef CJ_FILE_READER
 #include <stdio.h>
 #endif
@@ -159,6 +165,17 @@ void cj_init_file_reader(
     char *buffer,
     size_t buffer_size
 );
+#endif
+
+#ifdef CJ_STRING_READER
+/* An implementation of the reader interface that reads from a string. */
+typedef struct {
+    CJReader reader;
+    CJ_BOOL used;
+} CJStringReader;
+
+/* Initialize a string reader. */
+void cj_init_string_reader(CJStringReader *string_reader, const char *string);
 #endif
 
 /* A container_of implementation for use with interfaces. */

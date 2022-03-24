@@ -28,6 +28,10 @@
 /* for strtod */
 #include <stdlib.h>
 
+#ifdef CJ_STRING_READER
+#include <string.h>
+#endif
+
 /* get integer type big enough for unicode codepoints (21 bits). */
 #ifdef __STDC_VERSION__
 #include <stdint.h>
@@ -86,6 +90,27 @@ void cj_init_file_reader(
     file_reader->reader.buffer = buffer;
     file_reader->buffer_size = buffer_size;
     file_reader->reader.read = file_reader_callback;
+}
+#endif
+
+#ifdef CJ_STRING_READER
+static int string_reader_callback(CJReader *reader, size_t *size) {
+    CJStringReader *string_reader =
+        cj_container_of(reader, CJStringReader, reader);
+    if (string_reader->used) {
+        *size = 0;
+    } else {
+        *size = strlen(string_reader->reader.buffer);
+        string_reader->used = CJ_TRUE;
+    }
+    return 0;
+}
+
+void cj_init_string_reader(CJStringReader *string_reader, const char *string) {
+    /* TODO don't cast a const pointer to a mutable pointer */
+    string_reader->reader.buffer = (void*) string;
+    string_reader->reader.read = string_reader_callback;
+    string_reader->used = CJ_FALSE;
 }
 #endif
 
