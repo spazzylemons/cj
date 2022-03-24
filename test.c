@@ -49,20 +49,18 @@ static int read(CJReader *interface, size_t *size) {
 }
 
 int main(int argc, char *argv[]) {
+    FILE *f = fopen(argv[1], "r");
+    /* ensure the input file is open */
+    if (f == NULL) return EXIT_CRASH;
     /* define a buffer for the reader */
     char buffer[128];
-    FileReader reader = {
-        .file = fopen(argv[1], "r"),
-        .buffer_size = sizeof(buffer),
-        .interface = { .buffer = buffer, .read = read },
-    };
-    /* ensure the input file is open */
-    if (reader.file == NULL) return EXIT_CRASH;
+    CJFileReader file_reader;
+    cj_init_file_reader(&file_reader, f, buffer, sizeof(buffer));
     /* parse the input */
     CJValue value;
-    CJParseResult result = cj_parse(NULL, &reader.interface, &value);
+    CJParseResult result = cj_parse(NULL, &file_reader.reader, &value);
     /* close the file */
-    fclose(reader.file);
+    fclose(f);
     /* handle result value */
     switch (result) {
         case CJ_SUCCESS:

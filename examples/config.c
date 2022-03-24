@@ -159,23 +159,6 @@ static void print_config(const Config *config) {
     printf("theme: %s\n", config->theme);
 }
 
-/* The file reader interface for cj, containing a file pointer. */
-typedef struct {
-    FILE *file;
-    size_t buffer_size;
-    CJReader interface;
-} FileReader;
-
-/* Implementation of the read callback for cj. */
-static int read(CJReader *interface, size_t *size) {
-    FileReader *reader = cj_container_of(interface, FileReader, interface);
-    *size = fread(interface->buffer, 1, reader->buffer_size, reader->file);
-    if (*size == 0) {
-        if (!feof(reader->file)) return -1;
-    }
-    return 0;
-}
-
 int main(int argc, char *argv[]) {
     /* open config file */
     if (argc < 2) {
@@ -189,14 +172,11 @@ int main(int argc, char *argv[]) {
     }
     /* interfaces for building json tree */
     char buffer[128];
-    FileReader reader = {
-        .file = f,
-        .buffer_size = sizeof(buffer),
-        .interface = { .buffer = buffer, .read = read },
-    };
+    CJFileReader file_reader;
+    cj_init_file_reader(&file_reader, f, buffer, sizeof(buffer));
     /* parse json */
     CJValue value;
-    CJParseResult result = cj_parse(NULL, &reader.interface, &value);
+    CJParseResult result = cj_parse(NULL, &file_reader.reader, &value);
     /* close input file */
     fclose(f);
     /* handle json parsing error */

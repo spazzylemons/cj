@@ -61,6 +61,34 @@ static void *default_allocate(CJAllocator *allocator, void *ptr, size_t size) {
 static CJAllocator default_allocator = { default_allocate };
 #endif
 
+#ifdef CJ_FILE_READER
+static int file_reader_callback(CJReader *reader, size_t *size) {
+    CJFileReader *file_reader = cj_container_of(reader, CJFileReader, reader);
+    *size = fread(
+        reader->buffer,
+        1,
+        file_reader->buffer_size,
+        file_reader->file
+    );
+    if (*size == 0) {
+        if (!feof(file_reader->file)) return -1;
+    }
+    return 0;
+}
+
+void cj_init_file_reader(
+    CJFileReader *file_reader,
+    FILE *file,
+    char *buffer,
+    size_t buffer_size
+) {
+    file_reader->file = file;
+    file_reader->reader.buffer = buffer;
+    file_reader->buffer_size = buffer_size;
+    file_reader->reader.read = file_reader_callback;
+}
+#endif
+
 /* Global buffer for parser initial state. */
 static const char initial_buffer[1] = { ' ' };
 

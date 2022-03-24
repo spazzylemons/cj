@@ -41,6 +41,16 @@ typedef enum { CJ_FALSE, CJ_TRUE } CJ_BOOL;
  */
 #define CJ_DEFAULT_ALLOCATOR
 
+/*
+ * If defined, a built-in reader interface is available that can read from a
+ * *FILE.
+ */
+#define CJ_FILE_READER
+
+#ifdef CJ_FILE_READER
+#include <stdio.h>
+#endif
+
 /* The type of a JSON value. */
 typedef enum {
     CJ_NULL,
@@ -133,6 +143,23 @@ typedef struct CJReader {
      */
     int (*read)(struct CJReader *reader, size_t *size);
 } CJReader;
+
+#ifdef CJ_FILE_READER
+/* An implementation of the reader interface that reads from a file. */
+typedef struct {
+    CJReader reader;
+    FILE *file;
+    size_t buffer_size;
+} CJFileReader;
+
+/* Initialize a file reader. */
+void cj_init_file_reader(
+    CJFileReader *file_reader,
+    FILE *file,
+    char *buffer,
+    size_t buffer_size
+);
+#endif
 
 /* A container_of implementation for use with interfaces. */
 #define cj_container_of(ptr, type, member)\

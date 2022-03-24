@@ -37,38 +37,11 @@ argument. From there you may access your own data to read from whatever data
 stream you desire.
 
 ```c
-/* example interface - read from a file */
-typedef struct {
-    FILE *file;
-    size_t buffer_size;
-    CJReader interface;
-} FileReader;
-
-/* implement the read callback for a file reader */
-static int file_reader_read(CJReader *cj_reader, size_t *size) {
-    /* get the file reader from the interface pointer */
-    FileReader *file_reader = cj_container_of(cj_reader, FileReader, interface);
-    /* read characters, handle errors */
-    *size = fread(
-        cj_reader->buffer,
-        1,
-        file_reader->buffer_size,
-        file_reader->file
-    );
-    if (*size == 0) {
-        if (!feof(file_reader->file)) return -1;
-    }
-    return 0;
-}
-
 /* create a buffer for read operations */
 char b[128];
-/* store the callback in the interface */
-FileReader r = {
-    .file = f,
-    .buffer_size = sizeof(b),
-    .interface = { .buffer = b, .read = file_reader_read },
-};
+/* initialize a file reader */
+CJFileReader r;
+cj_init_file_reader(&r, f, b, sizeof(b));
 /* use a pointer to the interface for parsing */
 /* passing a NULL allocator uses the default allocator, if included */
 CJParseResult result = cj_parse(NULL, &r.interface, &value);
