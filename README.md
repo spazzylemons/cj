@@ -95,8 +95,8 @@ length of the string.
 
 ### Encoding
 
-cj only parses JSON encoded as UTF-8 without BOM. Invalid characters will be
-converted to the replacement character "�".
+cj only parses JSON encoded as UTF-8 without BOM. Surrogate pairs will be
+combined, and lone surrogates will be parsed as-is.
 
 ### Deep nesting
 

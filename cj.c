@@ -302,10 +302,6 @@ static void push_codepoint_unchecked(
 
 #define INVALID_CHAR 0xFFFD
 
-static void push_invalid_char(Parser *p, String *string) {
-    push_codepoint_unchecked(p, string, INVALID_CHAR);
-}
-
 static Codepoint hex_digit(Parser *p) {
     char c = take(p);
     if (c >= '0' && c <= '9') return c - '0';
@@ -316,7 +312,7 @@ static Codepoint hex_digit(Parser *p) {
 }
 
 static void push_codepoint(Parser *p, String *string, Codepoint codepoint) {
-    if (codepoint > 0x10FFFF || (codepoint > 0xD7FF && codepoint < 0xE000)) {
+    if (codepoint > 0x10FFFF) {
         codepoint = INVALID_CHAR;
     }
     push_codepoint_unchecked(p, string, codepoint);
@@ -390,22 +386,23 @@ static void utf16_escape(Parser *p, String *string, Codepoint *pending) {
         if (current & 0x400) {
             if (*pending != -1) {
                 /* if pending high half, combine them */
-                push_codepoint(p, string, *pending | (current & 0x3FF));
+                Codepoint high = ((*pending & 0x3FF) << 10) + 0x10000;
+                push_codepoint(p, string, high | (current & 0x3FF));
             } else {
-                /* print current as invalid */
-                push_invalid_char(p, string);
+                /* print current */
+                push_codepoint(p, string, current);
             }
             /* nothing pending anymore */
             *pending = -1;
         } else {
-            /* print pending as invalid */
-            if (*pending != -1) push_invalid_char(p, string);
+            /* print pending */
+            if (*pending != -1) push_codepoint(p, string, *pending);
             /* store high half in pending */
-            *pending = ((current & 0x3FF) << 10) | 0x10000;
+            *pending = current;
         }
     } else {
-        /* print pending as invalid */
-        if (*pending != -1) push_invalid_char(p, string);
+        /* print pending */
+        if (*pending != -1) push_codepoint(p, string, *pending);
         /* not a surrogate half, so print as is */
         push_codepoint(p, string, current);
         /* nothing pending anymore */
@@ -429,12 +426,12 @@ static void parse_string(Parser *p, CJString *str) {
             codepoint = read_utf8_codepoint(p);
         }
         if (pending != -1) {
-            push_invalid_char(p, &string);
+            push_codepoint(p, &string, pending);
             pending = -1;
         }
         push_codepoint(p, &string, codepoint);
     }
-    if (pending != -1) push_invalid_char(p, &string);
+    if (pending != -1) push_codepoint(p, &string, pending);
     /* add null terminator */
     push_char(p, &string, '\0');
     string_shrink(p, &string);

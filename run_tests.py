@@ -7,7 +7,7 @@ import sys
 # add entry for our library
 programs['C cj'] = {
     'url': 'https://github.com/spazzylemons/cj',
-    'commands': ['./test'],
+    'commands': ['python', 'test_wrapper.py'],
 }
 
 # compile test program
