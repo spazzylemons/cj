@@ -90,8 +90,8 @@ if (read_dimensions(&thumbnail_info, &width, &height)) {
 ### String length
 
 Strings are null-terminated, but cj allows nulls (`'\0'`) to appear anywhere in
-strings. Where possible, use the `length` field of `CJString` to specify the
-length of the string.
+strings. Where possible, use the `length` field of `CJString` instead of relying
+on a null terminator.
 
 ### Encoding
 
