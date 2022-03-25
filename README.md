@@ -96,7 +96,8 @@ on a null terminator.
 ### Encoding
 
 cj only parses JSON encoded as UTF-8 without BOM. Surrogate pairs will be
-combined, and lone surrogates will be parsed as-is.
+combined, and lone surrogates will be parsed as-is. Invalid UTF-8 will be
+rejected.
 
 ### Deep nesting
 

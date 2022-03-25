@@ -300,8 +300,6 @@ static void push_codepoint_unchecked(
     }
 }
 
-#define INVALID_CHAR 0xFFFD
-
 static Codepoint hex_digit(Parser *p) {
     char c = take(p);
     if (c >= '0' && c <= '9') return c - '0';
@@ -313,7 +311,7 @@ static Codepoint hex_digit(Parser *p) {
 
 static void push_codepoint(Parser *p, String *string, Codepoint codepoint) {
     if (codepoint > 0x10FFFF) {
-        codepoint = INVALID_CHAR;
+        error(p, CJ_SYNTAX_ERROR);
     }
     push_codepoint_unchecked(p, string, codepoint);
 }
@@ -333,24 +331,24 @@ static char read_escaped_codepoint(Parser *p) {
     }
 }
 
-static CJ_BOOL utf8_bad_cont(Parser *p, Codepoint *codepoint) {
+static void utf8_check_cont(Parser *p, Codepoint *codepoint) {
     char c;
-    if (at_eof(p)) return CJ_TRUE;
+    if (at_eof(p)) error(p, CJ_SYNTAX_ERROR);
     c = *p->buf_ptr;
-    if (((c & 0x80) == 0) || (c & 0x40)) return CJ_TRUE;
+    if (((c & 0x80) == 0) || (c & 0x40)) error(p, CJ_SYNTAX_ERROR);
     *codepoint <<= 6;
     *codepoint |= c & 0x3F;
     advance(p);
-    return CJ_FALSE;
 }
 
 static Codepoint overlong_check(
+    Parser *p,
     Codepoint codepoint,
     Codepoint mask,
     Codepoint min
 ) {
     codepoint &= mask;
-    if (codepoint <= min) return INVALID_CHAR;
+    if (codepoint <= min) error(p, CJ_SYNTAX_ERROR);
     return codepoint;
 }
 
@@ -361,16 +359,22 @@ static Codepoint read_utf8_codepoint(Parser *p) {
         if (b < ' ') error(p, CJ_SYNTAX_ERROR);
         return b;
     }
-    if ((b & (1 << 6)) == 0) return INVALID_CHAR;
+    if ((b & (1 << 6)) == 0) error(p, CJ_SYNTAX_ERROR);
     codepoint = b & 0x7F;
-    if (utf8_bad_cont(p, &codepoint)) return INVALID_CHAR;
-    if ((b & (1 << 5)) == 0) return overlong_check(codepoint, 0x7FF, 0x7F);
-    if (utf8_bad_cont(p, &codepoint)) return INVALID_CHAR;
-    if ((b & (1 << 4)) == 0) return overlong_check(codepoint, 0xFFFF, 0x7FF);
-    if (utf8_bad_cont(p, &codepoint)) return INVALID_CHAR;
-    if ((b & (1 << 3)) == 0) return overlong_check(codepoint, 0x1FFFFF, 0xFFFF);
+    utf8_check_cont(p, &codepoint);
+    if ((b & (1 << 5)) == 0) {
+        return overlong_check(p, codepoint, 0x7FF, 0x7F);
+    }
+    utf8_check_cont(p, &codepoint);
+    if ((b & (1 << 4)) == 0) {
+        return overlong_check(p, codepoint, 0xFFFF, 0x7FF);
+    }
+    utf8_check_cont(p, &codepoint);
+    if ((b & (1 << 3)) == 0) {
+        return overlong_check(p, codepoint, 0x1FFFFF, 0xFFFF);
+    }
     /* too many bytes! */
-    return INVALID_CHAR;
+    error(p, CJ_SYNTAX_ERROR);
 }
 
 static void utf16_escape(Parser *p, String *string, Codepoint *pending) {

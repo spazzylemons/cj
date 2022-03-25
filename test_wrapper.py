@@ -18,11 +18,5 @@ try:
         v = json.load(file, parse_int=float)
 
     assert v == json.loads(roundtrip, parse_int=float)
-except SystemExit:
-    raise
-except UnicodeDecodeError:
-    # if the JSON is invalid unicode, don't care for roundtrip
-    # TODO shouldn't cj reject the JSON in this case too?
-    pass
 except:
     sys.exit(EXIT_CRASH)
