@@ -483,8 +483,80 @@ static void parse_object(Parser *p, CJObject *obj) {
     object_shrink(p, &object);
 }
 
-static void push_taken(Parser *p, String *string) {
-    push_char(p, string, take_unchecked(p));
+#define EXP_START 21
+
+/* TODO handle potential overflows */
+typedef struct {
+    char data[27];
+    int index;
+    int exp;
+    int exp_sign;
+    int exp_add;
+    CJ_BOOL in_frac;
+} NumParser;
+
+static void init_num_parser(NumParser *np) {
+    memcpy(np->data, "+0.000000000000000000e+000", sizeof(np->data));
+    np->index = 1;
+    np->exp = 0;
+    np->exp_sign = 1;
+    np->exp_add = -1;
+    np->in_frac = CJ_FALSE;
+}
+
+static void set_sign(NumParser *np, char sign) {
+    np->data[0] = sign;
+}
+
+static void add_digit(NumParser *np, char digit) {
+    if (np->index == 1) {
+        if (digit == '0') {
+            np->exp_add--;
+            return;
+        } else {
+            np->data[1] = digit;
+            np->index = 3;
+        }
+    } else if (np->index < EXP_START) {
+        np->data[np->index++] = digit;
+    }
+    if (!np->in_frac) {
+        np->exp_add++;
+    }
+}
+
+static void set_exp_sign(NumParser *np, char sign) {
+    if (sign == '+') {
+        np->exp_sign = 1;
+    } else {
+        np->exp_sign = -1;
+    }
+}
+
+static int calc_exp(NumParser *np) {
+    int calc = np->exp * np->exp_sign + np->exp_add;
+    if (calc < -308) {
+        return -999;
+    } else if (calc > 308) {
+        return 999;
+    }
+    return calc;
+}
+
+static void add_exp(NumParser *np, char digit) {
+    np->exp *= 10;
+    np->exp += digit - '0';
+}
+
+static void write_exp(NumParser *np) {
+    int calc = calc_exp(np);
+    if (calc < 0) {
+        np->data[EXP_START + 1] = '-';
+        calc = -calc;
+    }
+    np->data[EXP_START + 2] = (calc / 100) + '0';
+    np->data[EXP_START + 3] = ((calc / 10) % 10) + '0';
+    np->data[EXP_START + 4] = (calc % 10) + '0';
 }
 
 static CJ_BOOL is_digit(Parser *p) {
@@ -492,53 +564,47 @@ static CJ_BOOL is_digit(Parser *p) {
     return *p->buf_ptr >= '0' && *p->buf_ptr <= '9';
 }
 
-static void require_digits(Parser *p, String *string) {
+static void require_digits(Parser *p, NumParser *np) {
     if (!is_digit(p)) error(p, CJ_SYNTAX_ERROR);
     do {
-        push_taken(p, string);
+        add_digit(np, take_unchecked(p));
     } while (is_digit(p));
 }
 
 static void parse_number(Parser *p, CJValue *value) {
-    /*
-     * not sure if this is the best way to do it tbh
-     * to parse a number, we insert a string in its place in the JSON tree
-     * containing the string value of the number, then use strtod on it, and
-     * finally free the string and put the number in the value.
-     */
-    String string;
-    double number;
-    value->type = CJ_STRING;
-    string_init(p, &string, &value->as.string);
+    NumParser np;
+    init_num_parser(&np);
     /* negative sign */
-    if (check(p, '-')) push_taken(p, &string);
+    if (check(p, '-')) {
+        set_sign(&np, take_unchecked(p));
+    }
     /* integer part */
     if (check(p, '0')) {
-        push_taken(p, &string);
+        advance(p);
     } else {
-        require_digits(p, &string);
+        require_digits(p, &np);
     }
     /* fraction part */
     if (check(p, '.')) {
-        push_taken(p, &string);
-        require_digits(p, &string);
+        np.in_frac = CJ_TRUE;
+        advance(p);
+        require_digits(p, &np);
     }
     /* exponent part */
     if (!at_eof(p) && (*p->buf_ptr == 'e' || *p->buf_ptr == 'E')) {
-        push_taken(p, &string);
+        advance(p);
         if (!at_eof(p) && (*p->buf_ptr == '-' || *p->buf_ptr == '+')) {
-            push_taken(p, &string);
+            set_exp_sign(&np, take_unchecked(p));
         }
-        require_digits(p, &string);
+        if (!is_digit(p)) error(p, CJ_SYNTAX_ERROR);
+        do {
+            add_exp(&np, take_unchecked(p));
+        } while (is_digit(p));
     }
     /* parse number */
-    /* TODO - how should huge numbers (that parse to infinity) be handled? */
-    push_char(p, &string, 0);
-    number = strtod(value->as.string.chars, NULL);
-    /* replace string with number */
-    dealloc(p->allocator, value->as.string.chars);
+    write_exp(&np);
     value->type = CJ_NUMBER;
-    value->as.number = number;
+    value->as.number = strtod(np.data, NULL);
 }
 
 static void parse(Parser *p, CJValue *value) {
