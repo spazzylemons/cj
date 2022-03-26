@@ -27,9 +27,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* to indicate that the parse was not a success or a failure */
-#define EXIT_CRASH 2
-
 static void print_string(const CJString *str) {
     putchar('"');
     for (size_t i = 0; i < str->length; i++) {
@@ -89,7 +86,7 @@ static void write_json(const CJValue *v) {
 int main(int argc, char *argv[]) {
     FILE *f = fopen(argv[1], "r");
     /* ensure the input file is open */
-    if (f == NULL) return EXIT_CRASH;
+    if (f == NULL) abort();
     /* define a buffer for the reader */
     char buffer[128];
     CJFileReader file_reader;
@@ -108,6 +105,6 @@ int main(int argc, char *argv[]) {
         case CJ_SYNTAX_ERROR: case CJ_TOO_MUCH_NESTING:
             return EXIT_FAILURE;
         case CJ_OUT_OF_MEMORY: case CJ_READ_ERROR:
-            return EXIT_CRASH;
+            abort();
     }
 }

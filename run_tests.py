@@ -1,22 +1,53 @@
-from JSONTestSuite.run_tests import programs, run_tests
-
-import os
+import json
 import subprocess
-import sys
 
-# add entry for our library
-programs['C cj'] = {
-    'url': 'https://github.com/spazzylemons/cj',
-    'commands': ['python', 'test_wrapper.py'],
-}
+from pathlib import Path
+from traceback import print_exc
+from typing import Optional
+
+def run_test_program(test_file: Path) -> Optional[bytes]:
+    try:
+        return subprocess.check_output(['./test', str(test_file)], timeout=5.0)
+    except subprocess.CalledProcessError as e:
+        # signal raised
+        if e.returncode < 0:
+            raise
+        # failure occurred
+        return None
+
+def run_test(test_file: Path):
+    roundtrip = run_test_program(test_file)
+
+    match test_file.name[0]:
+        case 'y':
+            assert roundtrip is not None
+        case 'n':
+            assert roundtrip is None
+
+    if roundtrip is None:
+        return
+
+    with test_file.open('rb') as file:
+        v = json.load(file, parse_int=float)
+
+    assert v == json.loads(roundtrip, parse_int=float)
 
 # compile test program
-if subprocess.call(['cc', 'test.c', 'cj.o', '-o', 'test']) != 0:
-    print('could not compile test program, tests cannot be performed')
-    sys.exit(1)
+subprocess.check_call(['cc', 'test.c', 'cj.o', '-o', 'test'])
 
 # run tests and then delete test program
 try:
-    run_tests(restrict_to_program='["C cj"]')
+    failures = 0
+    test_dir = Path('tests')
+    for test_file in test_dir.iterdir():
+        try:
+            run_test(test_file)
+        except:
+            print_exc()
+            print('FAIL: {}'.format(test_file))
+            failures += 1
+    if failures != 0:
+        print('{} tests failed'.format(failures))
+        exit(1)
 finally:
-    os.remove('test')
+    Path('test').unlink()

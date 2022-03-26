@@ -111,6 +111,11 @@ cj is thread safe, provided that:
 - Your interfaces are also thread safe
 - Your standard library's implementation of `setjmp`/`longjmp` is thread safe
 
+## Test suite
+
+cj uses the parsing tests from the
+[JSON Parsing Test Suite](https://github.com/nst/JSONTestSuite).
+
 ## License
 
 cj is licensed under the MIT License.
