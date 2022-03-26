@@ -32,12 +32,23 @@
 #include <string.h>
 #endif
 
-/* get integer type big enough for unicode codepoints (21 bits). */
 #ifdef __STDC_VERSION__
-#include <stdint.h>
-typedef int_least32_t Codepoint;
+    /* c99 or greater */
+    #include <stdint.h>
+    typedef int_least32_t Codepoint;
 #else
-typedef long Codepoint;
+    /* c89 */
+    #include <limits.h>
+    #if INT_MAX >= 0x1fffff
+        typedef int Codepoint;
+    #elif LONG_MAX >= 0x1fffff
+        typedef long Codepoint;
+    #else
+        /* something is very wrong with your compiler */
+        #error "long is not as big as it should be"
+    #endif
+
+    #define SIZE_MAX (((size_t) 0) - 1)
 #endif
 
 /* The parser structure. */
@@ -247,6 +258,10 @@ static void func_name##_init(Parser *p, ContainerName *container, void *loc) {\
 /* Add an element to the container. */ \
 static ChildType *func_name##_add_one(Parser *p, ContainerName *container) {\
     if (container->cap == container->slice->len) {\
+        /* guard against overflow */\
+        if (container->cap > SIZE_MAX / (sizeof(ChildType) * 2)) {\
+            error(p, CJ_OUT_OF_MEMORY);\
+        }\
         /* double in size for container growth */\
         container->slice->ptr = alloc(p, container->slice->ptr,\
             container->cap * sizeof(ChildType) * 2);\
