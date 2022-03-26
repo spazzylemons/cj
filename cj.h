@@ -183,9 +183,17 @@ void cj_init_string_reader(
 );
 #endif
 
+#ifdef offsetof
+/* if offsetof is provided, use it */
+#define cj_offset_of offsetof
+#else
+/* in case it's not provided, implement it ourselves */
+#define cj_offset_of(type, member) ((size_t) (&((type*) 0)->member))
+#endif
+
 /* A container_of implementation for use with interfaces. */
 #define cj_container_of(ptr, type, member)\
-    (type*) (void*) ((char*) ptr - offsetof(type, member))
+    (type*) (void*) ((char*) ptr - cj_offset_of(type, member))
 
 /* Try to parse a JSON value. */
 CJParseResult cj_parse(CJAllocator *allocator, CJReader *reader, CJValue *out);
