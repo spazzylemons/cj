@@ -483,25 +483,23 @@ static void parse_object(Parser *p, CJObject *obj) {
     object_shrink(p, &object);
 }
 
-#define EXP_START 21
+#define EXP_START 20
 
 /* TODO handle potential overflows */
 typedef struct {
-    char data[27];
+    char data[26];
     int index;
     int exp;
     int exp_sign;
     int exp_add;
-    CJ_BOOL in_frac;
 } NumParser;
 
 static void init_num_parser(NumParser *np) {
-    memcpy(np->data, "+0.000000000000000000e+000", sizeof(np->data));
+    memcpy(np->data, "+0000000000000000000e+", 22);
     np->index = 1;
     np->exp = 0;
     np->exp_sign = 1;
-    np->exp_add = -1;
-    np->in_frac = CJ_FALSE;
+    np->exp_add = -19;
 }
 
 static void set_sign(NumParser *np, char sign) {
@@ -513,23 +511,23 @@ static void add_digit(NumParser *np, char digit) {
         if (digit == '0') {
             np->exp_add--;
             return;
-        } else {
-            np->data[1] = digit;
-            np->index = 3;
         }
-    } else if (np->index < EXP_START) {
+    }
+    if (np->index < EXP_START) {
         np->data[np->index++] = digit;
     }
-    if (!np->in_frac) {
-        np->exp_add++;
-    }
+    np->exp_add++;
 }
 
-static void set_exp_sign(NumParser *np, char sign) {
-    if (sign == '+') {
-        np->exp_sign = 1;
-    } else {
-        np->exp_sign = -1;
+static void add_digit_frac(NumParser *np, char digit) {
+    if (np->index == 1) {
+        if (digit == '0') {
+            np->exp_add--;
+            return;
+        }
+    }
+    if (np->index < EXP_START) {
+        np->data[np->index++] = digit;
     }
 }
 
@@ -550,6 +548,7 @@ static void add_exp(NumParser *np, char digit) {
 
 static void write_exp(NumParser *np) {
     int calc = calc_exp(np);
+    np->data[EXP_START + 0] = 'e';
     if (calc < 0) {
         np->data[EXP_START + 1] = '-';
         calc = -calc;
@@ -557,6 +556,7 @@ static void write_exp(NumParser *np) {
     np->data[EXP_START + 2] = (calc / 100) + '0';
     np->data[EXP_START + 3] = ((calc / 10) % 10) + '0';
     np->data[EXP_START + 4] = (calc % 10) + '0';
+    np->data[EXP_START + 5] = '\0';
 }
 
 static CJ_BOOL is_digit(Parser *p) {
@@ -564,10 +564,14 @@ static CJ_BOOL is_digit(Parser *p) {
     return *p->buf_ptr >= '0' && *p->buf_ptr <= '9';
 }
 
-static void require_digits(Parser *p, NumParser *np) {
+static void require_digits(
+    Parser *p,
+    NumParser *np,
+    void (*consumer)(NumParser *np, char digit)
+) {
     if (!is_digit(p)) error(p, CJ_SYNTAX_ERROR);
     do {
-        add_digit(np, take_unchecked(p));
+        consumer(np, take_unchecked(p));
     } while (is_digit(p));
 }
 
@@ -577,29 +581,27 @@ static void parse_number(Parser *p, CJValue *value) {
     /* negative sign */
     if (check(p, '-')) {
         set_sign(&np, take_unchecked(p));
+    } else {
+        set_sign(&np, '+');
     }
     /* integer part */
     if (check(p, '0')) {
         advance(p);
     } else {
-        require_digits(p, &np);
+        require_digits(p, &np, add_digit);
     }
     /* fraction part */
     if (check(p, '.')) {
-        np.in_frac = CJ_TRUE;
         advance(p);
-        require_digits(p, &np);
+        require_digits(p, &np, add_digit_frac);
     }
     /* exponent part */
     if (!at_eof(p) && (*p->buf_ptr == 'e' || *p->buf_ptr == 'E')) {
         advance(p);
-        if (!at_eof(p) && (*p->buf_ptr == '-' || *p->buf_ptr == '+')) {
-            set_exp_sign(&np, take_unchecked(p));
+        if (!eat(p, '+') && eat(p, '-')) {
+            np.exp_sign = -1;
         }
-        if (!is_digit(p)) error(p, CJ_SYNTAX_ERROR);
-        do {
-            add_exp(&np, take_unchecked(p));
-        } while (is_digit(p));
+        require_digits(p, &np, add_exp);
     }
     /* parse number */
     write_exp(&np);
