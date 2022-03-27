@@ -531,8 +531,65 @@ static void parse_object(Parser *p, CJObject *obj) {
     object_shrink(p, &object);
 }
 
-static void push_taken(Parser *p, String *string) {
-    push_char(p, string, take_unchecked(p));
+#define NUMBER_BUF_SIZE 32
+
+typedef struct {
+    /* A pointer to the value in the tree. */
+    CJValue *value;
+    /* A string object to append characters to. */
+    String string;
+    /* A local string for short strings. */
+    CJString local;
+    /* A local buffer for short strings. */
+    char local_buf[NUMBER_BUF_SIZE];
+    /* The length of the local buffer. */
+} NumString;
+
+static void init_num_string(NumString *ns, CJValue *value) {
+    ns->value = value;
+    /* use local buffer until it's too large */
+    ns->string.cap = NUMBER_BUF_SIZE;
+    ns->string.slice = &ns->local;
+    ns->local.chars = ns->local_buf;
+    ns->local.length = 0;
+}
+
+static void push_num_string(Parser *p, NumString *ns, char c) {
+    if (ns->string.slice->length < NUMBER_BUF_SIZE) {
+        /* if we've got space, put it in the local buffer */
+        ns->local_buf[ns->string.slice->length++] = c;
+        return;
+    }
+
+    if (ns->string.slice->length == NUMBER_BUF_SIZE) {
+        /* we need to migrate to an allocation */
+        CJString *cj_string = &ns->value->as.string;
+        /* set value type */
+        ns->value->type = CJ_STRING;
+        /* set to null in case of failure */
+        cj_string->chars = NULL;
+        cj_string->length = 0;
+        /* allocate buffer and initialize length */
+        cj_string->chars = alloc(p, NULL, NUMBER_BUF_SIZE);
+        cj_string->length = NUMBER_BUF_SIZE;
+        /* copy over characters */
+        memcpy(cj_string->chars, ns->local_buf, NUMBER_BUF_SIZE);
+        /* update our string slice */
+        ns->string.slice = cj_string;
+    }
+
+    /* push to the allocated string */
+    push_char(p, &ns->string, c);
+}
+
+static void free_num_string(CJAllocator *allocator, NumString *ns) {
+    if (ns->string.slice != &ns->local) {
+        dealloc(allocator, ns->string.slice->chars);
+    }
+}
+
+static void push_taken(Parser *p, NumString *ns) {
+    push_num_string(p, ns, take_unchecked(p));
 }
 
 static CJ_BOOL is_digit(Parser *p) {
@@ -540,51 +597,51 @@ static CJ_BOOL is_digit(Parser *p) {
     return *p->buf_ptr >= '0' && *p->buf_ptr <= '9';
 }
 
-static void require_digits(Parser *p, String *string) {
+static void require_digits(Parser *p, NumString *ns) {
     if (!is_digit(p)) error(p, CJ_SYNTAX_ERROR);
     do {
-        push_taken(p, string);
+        push_taken(p, ns);
     } while (is_digit(p));
 }
 
 static void parse_number(Parser *p, CJValue *value) {
     /*
-     * not sure if this is the best way to do it tbh
-     * to parse a number, we insert a string in its place in the JSON tree
-     * containing the string value of the number, then use strtod on it, and
-     * finally free the string and put the number in the value.
+     * To parse a number, we read it into a buffer and use strtod on it. If the
+     * number is too large for the buffer, we allocate a string in the number's
+     * place in the JSON tree, and use that as the buffer. Finally, strtod is
+     * used to find the value of the number, then if needed, the string in the
+     * JSON tree is freed, and last, the number is inserted in the tree.
      */
-    String string;
+    NumString ns;
     double number;
-    value->type = CJ_STRING;
-    string_init(p, &string, &value->as.string);
+    init_num_string(&ns, value);
     /* negative sign */
-    if (check(p, '-')) push_taken(p, &string);
+    if (check(p, '-')) push_taken(p, &ns);
     /* integer part */
     if (check(p, '0')) {
-        push_taken(p, &string);
+        push_taken(p, &ns);
     } else {
-        require_digits(p, &string);
+        require_digits(p, &ns);
     }
     /* fraction part */
     if (check(p, '.')) {
-        push_taken(p, &string);
-        require_digits(p, &string);
+        push_taken(p, &ns);
+        require_digits(p, &ns);
     }
     /* exponent part */
     if (!at_eof(p) && (*p->buf_ptr == 'e' || *p->buf_ptr == 'E')) {
-        push_taken(p, &string);
+        push_taken(p, &ns);
         if (!at_eof(p) && (*p->buf_ptr == '-' || *p->buf_ptr == '+')) {
-            push_taken(p, &string);
+            push_taken(p, &ns);
         }
-        require_digits(p, &string);
+        require_digits(p, &ns);
     }
     /* parse number */
     /* TODO - how should huge numbers (that parse to infinity) be handled? */
-    push_char(p, &string, 0);
-    number = strtod(value->as.string.chars, NULL);
+    push_num_string(p, &ns, 0);
+    number = strtod(ns.string.slice->chars, NULL);
     /* replace string with number */
-    dealloc(p->allocator, value->as.string.chars);
+    free_num_string(p->allocator, &ns);
     value->type = CJ_NUMBER;
     value->as.number = number;
 }
