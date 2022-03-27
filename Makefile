@@ -6,9 +6,8 @@ LIB_FILE := lib$(LIB_NAME).a
 $(LIB_FILE): $(OBJ_FILE)
 	$(AR) rcs $@ $<
 
-# strip not required but makes it even smaller
 $(OBJ_FILE): $(LIB_NAME).c $(LIB_NAME).h
-	$(CC) -Os -std=c89 -Wall -Wextra -Wpedantic -Werror $(LIB_NAME).c -c -o $@
+	$(CC) -O3 -std=c89 -Wall -Wextra -Wpedantic -Werror $(LIB_NAME).c -c -o $@
 
 .PHONY: build clean test
 

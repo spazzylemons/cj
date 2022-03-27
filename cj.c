@@ -32,12 +32,23 @@
 #include <string.h>
 #endif
 
-/* get integer type big enough for unicode codepoints (21 bits). */
 #ifdef __STDC_VERSION__
-#include <stdint.h>
-typedef int_least32_t Codepoint;
+    /* c99 or greater */
+    #include <stdint.h>
+    typedef int_least32_t Codepoint;
 #else
-typedef long Codepoint;
+    /* c89 */
+    #include <limits.h>
+    #if INT_MAX >= 0x1fffff
+        typedef int Codepoint;
+    #elif LONG_MAX >= 0x1fffff
+        typedef long Codepoint;
+    #else
+        /* something is very wrong with your compiler */
+        #error "long is not as big as it should be"
+    #endif
+
+    #define SIZE_MAX (((size_t) 0) - 1)
 #endif
 
 /* The parser structure. */
@@ -219,59 +230,96 @@ static void require(Parser *p, char c) {
 /* starting capacity for strings, arrays, and objects */
 #define INITIAL_CAPACITY 8
 
+/* A generic container. */
+typedef struct {
+    size_t cap;
+    struct {
+        size_t len;
+        void *ptr;
+    } *slice;
+} GenericContainer;
+
+/* Initialize the container. */
+static void container_init(
+    Parser *p,
+    GenericContainer *container,
+    void *loc,
+    size_t child_size
+) {
+    container->slice = loc;
+    /* empty length and NULL pointer, in case of allocation error */
+    container->slice->len = 0;
+    container->slice->ptr = NULL;
+    /* then try to allocate */
+    container->slice->ptr = alloc(p, NULL, INITIAL_CAPACITY * child_size);
+    container->cap = INITIAL_CAPACITY;
+}
+
+/* Add an element to the container. */
+static void *container_add_one(
+    Parser *p,
+    GenericContainer *container,
+    size_t child_size
+) {
+    if (container->cap == container->slice->len) {
+        /* guard against overflow */
+        if (container->cap > SIZE_MAX / (child_size * 2)) {
+            error(p, CJ_OUT_OF_MEMORY);
+        }
+        /* double in size for container growth */
+        container->slice->ptr = alloc(p, container->slice->ptr,
+            container->cap * child_size * 2);
+        container->cap *= 2;
+    }
+    return (char*) container->slice->ptr + container->slice->len++ * child_size;
+}
+
+/* Shrink the data to fit. */
+static void container_shrink(
+    Parser *p,
+    GenericContainer *container,
+    size_t child_size
+) {
+    if (container->slice->len == 0) {\
+        /* if empty, then use NULL for the data */
+        dealloc(p->allocator, container->slice->ptr);
+        container->slice->ptr = NULL;
+    } else {\
+        container->slice->ptr = alloc(p, container->slice->ptr,
+            container->slice->len * child_size);
+    }
+}
+
 /*
  * A generic container generator for use with cj's container types.
  */
-#define DEFINE_CONTAINER(ContainerName, func_name, ChildType)\
-/* A generic container type. */ \
+#define DEFINE_CONTAINER(ContainerName, func_name, ChildType, ArrayType)\
 typedef struct {\
     size_t cap;\
-    struct {\
-        size_t len;\
-        ChildType *ptr;\
-    } *slice;\
+    ArrayType *slice;\
 } ContainerName;\
 \
-/* Initialize the container. */ \
-static void func_name##_init(Parser *p, ContainerName *container, void *loc) {\
-    container->slice = loc;\
-    /* empty length and NULL pointer, in case of allocation error */\
-    container->slice->len = 0;\
-    container->slice->ptr = NULL;\
-    /* then try to allocate */\
-    container->slice->ptr = alloc(p, NULL, INITIAL_CAPACITY\
-        * sizeof(ChildType));\
-    container->cap = INITIAL_CAPACITY;\
+static void func_name##_init(\
+    Parser *p,\
+    ContainerName *container,\
+    ArrayType *loc\
+) {\
+    container_init(p, (void*) container, loc, sizeof(ChildType));\
 }\
 \
-/* Add an element to the container. */ \
 static ChildType *func_name##_add_one(Parser *p, ContainerName *container) {\
-    if (container->cap == container->slice->len) {\
-        /* double in size for container growth */\
-        container->slice->ptr = alloc(p, container->slice->ptr,\
-            container->cap * sizeof(ChildType) * 2);\
-        container->cap *= 2;\
-    }\
-    return &container->slice->ptr[container->slice->len++];\
+    return container_add_one(p, (void*) container, sizeof(ChildType));\
 }\
 \
-/* Shrink the data to fit. */\
 static void func_name##_shrink(Parser *p, ContainerName *container) {\
-    if (container->slice->len == 0) {\
-        /* if empty, then use NULL for the data */\
-        dealloc(p->allocator, container->slice->ptr);\
-        container->slice->ptr = NULL;\
-    } else {\
-        container->slice->ptr = alloc(p, container->slice->ptr,\
-            container->slice->len * sizeof(ChildType));\
-    }\
+    container_shrink(p, (void*) container, sizeof(ChildType));\
 }
 
 /* Definitions of container wrappers for all of cj's container types. */
 
-DEFINE_CONTAINER(String, string, char)
-DEFINE_CONTAINER(Array, array, CJValue)
-DEFINE_CONTAINER(Object, object, CJObjectMember)
+DEFINE_CONTAINER(String, string, char, CJString)
+DEFINE_CONTAINER(Array, array, CJValue, CJArray)
+DEFINE_CONTAINER(Object, object, CJObjectMember, CJObject)
 
 static void push_char(Parser *p, String *string, char c) {
     *string_add_one(p, string) = c;
